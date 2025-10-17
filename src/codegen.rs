@@ -109,11 +109,22 @@ impl CodeGenerator {
                 )
             }
             Expr::Unary { op, operand } => {
-                format!(
-                    "({}{})",
-                    self.generate_unary_op(op),
-                    self.generate_expr(operand)
-                )
+                // 处理前缀和后缀运算符
+                match op {
+                    UnaryOp::PostIncrement => {
+                        format!("({}++)", self.generate_expr(operand))
+                    }
+                    UnaryOp::PostDecrement => {
+                        format!("({}--)", self.generate_expr(operand))
+                    }
+                    _ => {
+                        format!(
+                            "({}{})",
+                            self.generate_unary_op(op),
+                            self.generate_expr(operand)
+                        )
+                    }
+                }
             }
             Expr::Call { func, args } => {
                 let args_str = args
@@ -172,8 +183,23 @@ impl CodeGenerator {
     fn generate_stmt(&mut self, stmt: &Stmt) -> String {
         match stmt {
             Stmt::VarDecl { typ, name, init } => {
-                let mut result =
-                    format!("{}{} {}", self.indent_str(), self.generate_type(typ), name);
+                let mut result = format!("{}", self.indent_str());
+
+                // 特殊处理数组类型的声明
+                match typ {
+                    CType::Array { element_type, size } => {
+                        result.push_str(&format!("{} {}", self.generate_type(element_type), name));
+                        if let Some(s) = size {
+                            result.push_str(&format!("[{}]", s));
+                        } else {
+                            result.push_str("[]");
+                        }
+                    }
+                    _ => {
+                        result.push_str(&format!("{} {}", self.generate_type(typ), name));
+                    }
+                }
+
                 if let Some(expr) = init {
                     result.push_str(&format!(" = {}", self.generate_expr(expr)));
                 }

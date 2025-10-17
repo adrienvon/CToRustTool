@@ -379,15 +379,58 @@ impl Parser {
             }
             Token::LParen => {
                 self.advance();
-                let expr = self.parse_expr()?;
+
+                // 检查是否是类型转换 (type)expr
+                // 需要向前看，判断括号内是否是类型
+                if self.is_type_keyword() {
+                    // 解析类型转换
+                    let typ = self.parse_type()?;
+                    self.expect(Token::RParen)?;
+                    let expr = self.parse_unary()?;
+                    Ok(Expr::Cast {
+                        typ,
+                        expr: Box::new(expr),
+                    })
+                } else {
+                    // 普通的括号表达式
+                    let expr = self.parse_expr()?;
+                    self.expect(Token::RParen)?;
+                    Ok(expr)
+                }
+            }
+            Token::Sizeof => {
+                self.advance();
+                self.expect(Token::LParen)?;
+                let typ = self.parse_type()?;
                 self.expect(Token::RParen)?;
-                Ok(expr)
+                Ok(Expr::SizeOf(typ))
             }
             _ => Err(format!(
                 "Unexpected token in expression: {:?}",
                 self.current_token()
             )),
         }
+    }
+
+    // 辅助函数：检查当前token是否是类型关键字
+    fn is_type_keyword(&self) -> bool {
+        matches!(
+            self.current_token(),
+            Token::Int
+                | Token::Char
+                | Token::Float
+                | Token::Double
+                | Token::Void
+                | Token::Long
+                | Token::Short
+                | Token::Unsigned
+                | Token::Signed
+                | Token::Const
+                | Token::Volatile
+                | Token::Struct
+                | Token::Union
+                | Token::Enum
+        )
     }
 
     fn parse_unary(&mut self) -> Result<Expr, String> {
@@ -408,6 +451,14 @@ impl Parser {
                     operand: Box::new(operand),
                 })
             }
+            Token::BitNot => {
+                self.advance();
+                let operand = self.parse_unary()?;
+                Ok(Expr::Unary {
+                    op: UnaryOp::BitNot,
+                    operand: Box::new(operand),
+                })
+            }
             Token::Star => {
                 self.advance();
                 let operand = self.parse_unary()?;
@@ -424,8 +475,95 @@ impl Parser {
                     operand: Box::new(operand),
                 })
             }
-            _ => self.parse_primary(),
+            Token::Increment => {
+                self.advance();
+                let operand = self.parse_unary()?;
+                Ok(Expr::Unary {
+                    op: UnaryOp::PreIncrement,
+                    operand: Box::new(operand),
+                })
+            }
+            Token::Decrement => {
+                self.advance();
+                let operand = self.parse_unary()?;
+                Ok(Expr::Unary {
+                    op: UnaryOp::PreDecrement,
+                    operand: Box::new(operand),
+                })
+            }
+            _ => self.parse_postfix(),
         }
+    }
+
+    // 新增：处理后缀表达式（数组访问、成员访问、后缀++/--）
+    fn parse_postfix(&mut self) -> Result<Expr, String> {
+        let mut expr = self.parse_primary()?;
+
+        loop {
+            match self.current_token() {
+                Token::LBracket => {
+                    // 数组访问 arr[index]
+                    self.advance();
+                    let index = self.parse_expr()?;
+                    self.expect(Token::RBracket)?;
+                    expr = Expr::ArrayAccess {
+                        array: Box::new(expr),
+                        index: Box::new(index),
+                    };
+                }
+                Token::Dot => {
+                    // 结构体成员访问 obj.member
+                    self.advance();
+                    if let Token::Identifier(member) = self.current_token().clone() {
+                        self.advance();
+                        expr = Expr::MemberAccess {
+                            object: Box::new(expr),
+                            member,
+                        };
+                    } else {
+                        return Err(format!(
+                            "Expected identifier after '.', got {:?}",
+                            self.current_token()
+                        ));
+                    }
+                }
+                Token::Arrow => {
+                    // 指针成员访问 ptr->member
+                    self.advance();
+                    if let Token::Identifier(member) = self.current_token().clone() {
+                        self.advance();
+                        expr = Expr::PointerMemberAccess {
+                            object: Box::new(expr),
+                            member,
+                        };
+                    } else {
+                        return Err(format!(
+                            "Expected identifier after '->', got {:?}",
+                            self.current_token()
+                        ));
+                    }
+                }
+                Token::Increment => {
+                    // 后缀递增 x++
+                    self.advance();
+                    expr = Expr::Unary {
+                        op: UnaryOp::PostIncrement,
+                        operand: Box::new(expr),
+                    };
+                }
+                Token::Decrement => {
+                    // 后缀递减 x--
+                    self.advance();
+                    expr = Expr::Unary {
+                        op: UnaryOp::PostDecrement,
+                        operand: Box::new(expr),
+                    };
+                }
+                _ => break,
+            }
+        }
+
+        Ok(expr)
     }
 
     fn parse_multiplicative(&mut self) -> Result<Expr, String> {
@@ -472,7 +610,7 @@ impl Parser {
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, String> {
-        let mut left = self.parse_additive()?;
+        let mut left = self.parse_shift()?;
 
         loop {
             let op = match self.current_token() {
@@ -482,6 +620,28 @@ impl Parser {
                 Token::Ge => BinaryOp::Ge,
                 Token::Eq => BinaryOp::Eq,
                 Token::Ne => BinaryOp::Ne,
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_shift()?;
+            left = Expr::Binary {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
+    // 新增：位移运算符 << >>
+    fn parse_shift(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_additive()?;
+
+        loop {
+            let op = match self.current_token() {
+                Token::LeftShift => BinaryOp::LeftShift,
+                Token::RightShift => BinaryOp::RightShift,
                 _ => break,
             };
             self.advance();
@@ -497,7 +657,7 @@ impl Parser {
     }
 
     fn parse_logical(&mut self) -> Result<Expr, String> {
-        let mut left = self.parse_comparison()?;
+        let mut left = self.parse_bitwise_or()?;
 
         loop {
             let op = match self.current_token() {
@@ -506,7 +666,7 @@ impl Parser {
                 _ => break,
             };
             self.advance();
-            let right = self.parse_comparison()?;
+            let right = self.parse_bitwise_or()?;
             left = Expr::Binary {
                 op,
                 left: Box::new(left),
@@ -517,8 +677,59 @@ impl Parser {
         Ok(left)
     }
 
+    // 新增：位或运算 |
+    fn parse_bitwise_or(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_bitwise_xor()?;
+
+        while self.current_token() == &Token::BitOr {
+            self.advance();
+            let right = self.parse_bitwise_xor()?;
+            left = Expr::Binary {
+                op: BinaryOp::BitOr,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
+    // 新增：位异或运算 ^
+    fn parse_bitwise_xor(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_bitwise_and()?;
+
+        while self.current_token() == &Token::BitXor {
+            self.advance();
+            let right = self.parse_bitwise_and()?;
+            left = Expr::Binary {
+                op: BinaryOp::BitXor,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
+    // 新增：位与运算 &
+    fn parse_bitwise_and(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_comparison()?;
+
+        while self.current_token() == &Token::BitAnd {
+            self.advance();
+            let right = self.parse_comparison()?;
+            left = Expr::Binary {
+                op: BinaryOp::BitAnd,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
     fn parse_assignment(&mut self) -> Result<Expr, String> {
-        let left = self.parse_logical()?;
+        let left = self.parse_ternary()?;
 
         if self.current_token() == &Token::Assign {
             self.advance();
@@ -529,6 +740,25 @@ impl Parser {
             })
         } else {
             Ok(left)
+        }
+    }
+
+    // 新增：三元运算符 ? :
+    fn parse_ternary(&mut self) -> Result<Expr, String> {
+        let cond = self.parse_logical()?;
+
+        if self.current_token() == &Token::Question {
+            self.advance();
+            let then_expr = self.parse_expr()?;
+            self.expect(Token::Colon)?;
+            let else_expr = self.parse_ternary()?;
+            Ok(Expr::Ternary {
+                cond: Box::new(cond),
+                then_expr: Box::new(then_expr),
+                else_expr: Box::new(else_expr),
+            })
+        } else {
+            Ok(cond)
         }
     }
 
@@ -549,7 +779,10 @@ impl Parser {
             | Token::Const
             | Token::Volatile
             | Token::Static
-            | Token::Extern => {
+            | Token::Extern
+            | Token::Struct
+            | Token::Union
+            | Token::Enum => {
                 let typ = self.parse_type()?;
                 if let Token::Identifier(name) = self.current_token().clone() {
                     self.advance();
