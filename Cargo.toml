@@ -1,6 +1,6 @@
 [package]
-name = "contest-master-9471c380ad48eeb54a147ee42515414547e81a4b"
+name = "c-to-rust-tool"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
