@@ -1,17 +1,50 @@
 /// 简单的词法分析器
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    // 关键字
+    // 关键字 - 类型
     Int,
     Char,
     Float,
     Double,
     Void,
+    Long,
+    Short,
+    Unsigned,
+    Signed,
+    Struct,
+    Union,
+    Enum,
+    Typedef,
+    Const,
+    Volatile,
+    Static,
+    Extern,
+    Auto,
+    Register,
+
+    // 关键字 - 控制流
     If,
     Else,
     While,
+    Do,
     For,
+    Switch,
+    Case,
+    Default,
+    Break,
+    Continue,
     Return,
+    Goto,
+
+    // 关键字 - 其他
+    Sizeof,
+
+    // 预处理器
+    Include(String),
+    Define(String, String),
+    Ifdef,
+    Ifndef,
+    Endif,
 
     // 标识符和字面量
     Identifier(String),
@@ -20,29 +53,63 @@ pub enum Token {
     CharLiteral(char),
     StringLiteral(String),
 
-    // 运算符
+    // 运算符 - 算术
     Plus,
     Minus,
     Star,
     Slash,
     Percent,
+
+    // 运算符 - 位运算
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitNot,
+    LeftShift,
+    RightShift,
+
+    // 运算符 - 赋值
     Assign,
+    PlusAssign,
+    MinusAssign,
+    StarAssign,
+    SlashAssign,
+    PercentAssign,
+    AndAssign,
+    OrAssign,
+    XorAssign,
+    LeftShiftAssign,
+    RightShiftAssign,
+
+    // 运算符 - 比较
     Eq,
     Ne,
     Lt,
     Gt,
     Le,
     Ge,
+
+    // 运算符 - 逻辑
     And,
     Or,
     Not,
+
+    // 运算符 - 其他
     Ampersand,
+    Increment,
+    Decrement,
+    Arrow,
+    Dot,
+    Question,
+    Colon,
 
     // 分隔符
     LParen,
     RParen,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
     Semicolon,
     Comma,
 
@@ -122,16 +189,44 @@ impl Lexer {
         }
 
         match ident.as_str() {
+            // 类型关键字
             "int" => Token::Int,
             "char" => Token::Char,
             "float" => Token::Float,
             "double" => Token::Double,
             "void" => Token::Void,
+            "long" => Token::Long,
+            "short" => Token::Short,
+            "unsigned" => Token::Unsigned,
+            "signed" => Token::Signed,
+            "struct" => Token::Struct,
+            "union" => Token::Union,
+            "enum" => Token::Enum,
+            "typedef" => Token::Typedef,
+            "const" => Token::Const,
+            "volatile" => Token::Volatile,
+            "static" => Token::Static,
+            "extern" => Token::Extern,
+            "auto" => Token::Auto,
+            "register" => Token::Register,
+
+            // 控制流关键字
             "if" => Token::If,
             "else" => Token::Else,
             "while" => Token::While,
+            "do" => Token::Do,
             "for" => Token::For,
+            "switch" => Token::Switch,
+            "case" => Token::Case,
+            "default" => Token::Default,
+            "break" => Token::Break,
+            "continue" => Token::Continue,
             "return" => Token::Return,
+            "goto" => Token::Goto,
+
+            // 其他关键字
+            "sizeof" => Token::Sizeof,
+
             _ => Token::Identifier(ident),
         }
     }
@@ -175,6 +270,15 @@ impl Lexer {
         Token::CharLiteral(ch)
     }
 
+    fn peek_char(&self, offset: usize) -> Option<char> {
+        let peek_pos = self.pos + offset;
+        if peek_pos < self.input.len() {
+            Some(self.input[peek_pos])
+        } else {
+            None
+        }
+    }
+
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
 
@@ -189,23 +293,62 @@ impl Lexer {
                     match ch {
                         '+' => {
                             self.advance();
-                            Token::Plus
+                            match self.current_char() {
+                                Some('+') => {
+                                    self.advance();
+                                    Token::Increment
+                                }
+                                Some('=') => {
+                                    self.advance();
+                                    Token::PlusAssign
+                                }
+                                _ => Token::Plus,
+                            }
                         }
                         '-' => {
                             self.advance();
-                            Token::Minus
+                            match self.current_char() {
+                                Some('-') => {
+                                    self.advance();
+                                    Token::Decrement
+                                }
+                                Some('=') => {
+                                    self.advance();
+                                    Token::MinusAssign
+                                }
+                                Some('>') => {
+                                    self.advance();
+                                    Token::Arrow
+                                }
+                                _ => Token::Minus,
+                            }
                         }
                         '*' => {
                             self.advance();
-                            Token::Star
+                            if self.current_char() == Some('=') {
+                                self.advance();
+                                Token::StarAssign
+                            } else {
+                                Token::Star
+                            }
                         }
                         '/' => {
                             self.advance();
-                            Token::Slash
+                            if self.current_char() == Some('=') {
+                                self.advance();
+                                Token::SlashAssign
+                            } else {
+                                Token::Slash
+                            }
                         }
                         '%' => {
                             self.advance();
-                            Token::Percent
+                            if self.current_char() == Some('=') {
+                                self.advance();
+                                Token::PercentAssign
+                            } else {
+                                Token::Percent
+                            }
                         }
                         '(' => {
                             self.advance();
@@ -223,6 +366,14 @@ impl Lexer {
                             self.advance();
                             Token::RBrace
                         }
+                        '[' => {
+                            self.advance();
+                            Token::LBracket
+                        }
+                        ']' => {
+                            self.advance();
+                            Token::RBracket
+                        }
                         ';' => {
                             self.advance();
                             Token::Semicolon
@@ -231,22 +382,57 @@ impl Lexer {
                             self.advance();
                             Token::Comma
                         }
+                        '.' => {
+                            self.advance();
+                            Token::Dot
+                        }
+                        '?' => {
+                            self.advance();
+                            Token::Question
+                        }
+                        ':' => {
+                            self.advance();
+                            Token::Colon
+                        }
+                        '~' => {
+                            self.advance();
+                            Token::BitNot
+                        }
                         '&' => {
                             self.advance();
-                            if self.current_char() == Some('&') {
-                                self.advance();
-                                Token::And
-                            } else {
-                                Token::Ampersand
+                            match self.current_char() {
+                                Some('&') => {
+                                    self.advance();
+                                    Token::And
+                                }
+                                Some('=') => {
+                                    self.advance();
+                                    Token::AndAssign
+                                }
+                                _ => Token::Ampersand,
                             }
                         }
                         '|' => {
                             self.advance();
-                            if self.current_char() == Some('|') {
+                            match self.current_char() {
+                                Some('|') => {
+                                    self.advance();
+                                    Token::Or
+                                }
+                                Some('=') => {
+                                    self.advance();
+                                    Token::OrAssign
+                                }
+                                _ => Token::BitOr,
+                            }
+                        }
+                        '^' => {
+                            self.advance();
+                            if self.current_char() == Some('=') {
                                 self.advance();
-                                Token::Or
+                                Token::XorAssign
                             } else {
-                                Token::Eof // 暂不支持按位或
+                                Token::BitXor
                             }
                         }
                         '!' => {
@@ -269,20 +455,40 @@ impl Lexer {
                         }
                         '<' => {
                             self.advance();
-                            if self.current_char() == Some('=') {
-                                self.advance();
-                                Token::Le
-                            } else {
-                                Token::Lt
+                            match self.current_char() {
+                                Some('=') => {
+                                    self.advance();
+                                    Token::Le
+                                }
+                                Some('<') => {
+                                    self.advance();
+                                    if self.current_char() == Some('=') {
+                                        self.advance();
+                                        Token::LeftShiftAssign
+                                    } else {
+                                        Token::LeftShift
+                                    }
+                                }
+                                _ => Token::Lt,
                             }
                         }
                         '>' => {
                             self.advance();
-                            if self.current_char() == Some('=') {
-                                self.advance();
-                                Token::Ge
-                            } else {
-                                Token::Gt
+                            match self.current_char() {
+                                Some('=') => {
+                                    self.advance();
+                                    Token::Ge
+                                }
+                                Some('>') => {
+                                    self.advance();
+                                    if self.current_char() == Some('=') {
+                                        self.advance();
+                                        Token::RightShiftAssign
+                                    } else {
+                                        Token::RightShift
+                                    }
+                                }
+                                _ => Token::Gt,
                             }
                         }
                         '"' => self.read_string(),

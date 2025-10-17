@@ -422,12 +422,13 @@ impl Parser {
     }
 
     pub fn parse_program(&mut self) -> Result<Program, String> {
-        let mut functions = Vec::new();
+        let mut declarations = Vec::new();
 
         while self.current_token() != &Token::Eof {
-            functions.push(self.parse_function()?);
+            // 简化版：目前只解析函数
+            declarations.push(Declaration::Function(self.parse_function()?));
         }
 
-        Ok(Program { functions })
+        Ok(Program { declarations })
     }
 }
