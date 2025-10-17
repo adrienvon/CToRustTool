@@ -352,17 +352,100 @@ impl CodeGenerator {
         result
     }
 
+    pub fn generate_struct(&self, struct_def: &StructDef) -> String {
+        let mut result = format!("struct {} {{\n", struct_def.name);
+        for field in &struct_def.fields {
+            result.push_str(&format!(
+                "    {} {};\n",
+                self.generate_type(&field.typ),
+                field.name
+            ));
+        }
+        result.push_str("}");
+        result
+    }
+
+    pub fn generate_union(&self, union_def: &UnionDef) -> String {
+        let mut result = format!("union {} {{\n", union_def.name);
+        for field in &union_def.fields {
+            result.push_str(&format!(
+                "    {} {};\n",
+                self.generate_type(&field.typ),
+                field.name
+            ));
+        }
+        result.push_str("}");
+        result
+    }
+
+    pub fn generate_enum(&self, enum_def: &EnumDef) -> String {
+        let mut result = format!("enum {} {{\n", enum_def.name);
+        for (i, variant) in enum_def.variants.iter().enumerate() {
+            result.push_str("    ");
+            result.push_str(&variant.name);
+            if let Some(value) = variant.value {
+                result.push_str(&format!(" = {}", value));
+            }
+            if i < enum_def.variants.len() - 1 {
+                result.push(',');
+            }
+            result.push('\n');
+        }
+        result.push_str("}");
+        result
+    }
+
+    pub fn generate_typedef(&self, typedef_def: &TypedefDef) -> String {
+        format!(
+            "typedef {} {};",
+            self.generate_type(&typedef_def.target_type),
+            typedef_def.name
+        )
+    }
+
     pub fn generate_program(&mut self, program: &Program) -> String {
         let mut result = String::new();
 
         for decl in &program.declarations {
             match decl {
                 Declaration::Function(func) => {
-                    result.push_str(&self.generate_function(func));
-                    result.push('\n');
+                    // 只生成有函数体的函数
+                    if !func.body.is_empty() {
+                        result.push_str(&self.generate_function(func));
+                        result.push('\n');
+                    }
                 }
-                _ => {
-                    // 暂时跳过其他声明类型
+                Declaration::Struct(struct_def) => {
+                    result.push_str(&self.generate_struct(struct_def));
+                    result.push_str(";\n\n");
+                }
+                Declaration::Union(union_def) => {
+                    result.push_str(&self.generate_union(union_def));
+                    result.push_str(";\n\n");
+                }
+                Declaration::Enum(enum_def) => {
+                    result.push_str(&self.generate_enum(enum_def));
+                    result.push_str(";\n\n");
+                }
+                Declaration::Typedef(typedef_def) => {
+                    result.push_str(&self.generate_typedef(typedef_def));
+                    result.push_str("\n\n");
+                }
+                Declaration::GlobalVar { typ, name, init } => {
+                    result.push_str(&self.generate_type(typ));
+                    result.push(' ');
+                    result.push_str(name);
+                    if let Some(expr) = init {
+                        result.push_str(" = ");
+                        result.push_str(&self.generate_expr(expr));
+                    }
+                    result.push_str(";\n\n");
+                }
+                Declaration::Include(path) => {
+                    result.push_str(&format!("#include {}\n", path));
+                }
+                Declaration::Define { name, value } => {
+                    result.push_str(&format!("#define {} {}\n", name, value));
                 }
             }
         }
