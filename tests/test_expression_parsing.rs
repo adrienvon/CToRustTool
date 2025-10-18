@@ -15,7 +15,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse cast expression: {:?}",
@@ -35,7 +35,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse array access: {:?}",
@@ -61,7 +61,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse struct member access: {:?}",
@@ -87,7 +87,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse pointer member access: {:?}",
@@ -110,7 +110,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse increment/decrement: {:?}",
@@ -135,7 +135,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse bitwise operators: {:?}",
@@ -155,7 +155,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse ternary operator: {:?}",
@@ -174,7 +174,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse sizeof operator: {:?}",
@@ -195,7 +195,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse pointer dereference: {:?}",
@@ -226,7 +226,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input);
-        let result = parser.parse();
+        let result = parser.parse_program();
         assert!(
             result.is_ok(),
             "Failed to parse complex expression: {:?}",

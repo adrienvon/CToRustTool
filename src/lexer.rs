@@ -102,6 +102,8 @@ pub enum Token {
     Dot,
     Question,
     Colon,
+    // 三点省略号
+    Ellipsis,
 
     // 分隔符
     LParen,
@@ -143,26 +145,101 @@ impl Lexer {
     }
 
     fn skip_whitespace(&mut self) {
-        while let Some(ch) = self.current_char() {
+        loop {
+            let ch = match self.current_char() {
+                Some(c) => c,
+                None => break,
+            };
             if ch.is_whitespace() {
                 self.advance();
-            } else {
-                break;
+                continue;
             }
+            // line comment: // ...\n
+            if ch == '/' {
+                match self.peek_char(1) {
+                    Some('/') => {
+                        // skip till end of line
+                        self.advance(); // '/'
+                        self.advance(); // '/'
+                        while let Some(c2) = self.current_char() {
+                            if c2 == '\n' {
+                                break;
+                            }
+                            self.advance();
+                        }
+                        continue;
+                    }
+                    Some('*') => {
+                        // block comment: /* ... */
+                        self.advance(); // '/'
+                        self.advance(); // '*'
+                        while let Some(c2) = self.current_char() {
+                            if c2 == '*' && self.peek_char(1) == Some('/') {
+                                self.advance(); // '*'
+                                self.advance(); // '/'
+                                break;
+                            }
+                            self.advance();
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            break;
         }
     }
 
     fn read_number(&mut self) -> Token {
-        let mut num_str = String::new();
+        let mut s = String::new();
         let mut is_float = false;
 
+        // 处理进制前缀 0x / 0X (十六进制)；0 开头的八进制（简化为十进制解析）
+        if self.current_char() == Some('0') {
+            s.push('0');
+            self.advance();
+            if let Some(ch1) = self.current_char() {
+                if ch1 == 'x' || ch1 == 'X' {
+                    s.push(ch1);
+                    self.advance();
+                    while let Some(ch) = self.current_char() {
+                        if ch.is_ascii_hexdigit() {
+                            s.push(ch);
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+                    // 将十六进制字符串转换为整数
+                    let val = i64::from_str_radix(&s[2..], 16).unwrap_or(0) as i32;
+                    return Token::IntLiteral(val);
+                } else if ch1 == 'b' || ch1 == 'B' {
+                    // 二进制字面量 0b...
+                    self.advance();
+                    let mut bits = String::new();
+                    while let Some(ch) = self.current_char() {
+                        if ch == '0' || ch == '1' {
+                            bits.push(ch);
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+                    let val = i64::from_str_radix(&bits, 2).unwrap_or(0) as i32;
+                    return Token::IntLiteral(val);
+                } else {
+                    // 0 开头的数字，继续按十进制/浮点解析（简单处理）
+                }
+            }
+        }
+
         while let Some(ch) = self.current_char() {
-            if ch.is_numeric() {
-                num_str.push(ch);
+            if ch.is_ascii_digit() {
+                s.push(ch);
                 self.advance();
             } else if ch == '.' && !is_float {
                 is_float = true;
-                num_str.push(ch);
+                s.push(ch);
                 self.advance();
             } else {
                 break;
@@ -170,9 +247,9 @@ impl Lexer {
         }
 
         if is_float {
-            Token::FloatLiteral(num_str.parse().unwrap())
+            Token::FloatLiteral(s.parse().unwrap_or(0.0))
         } else {
-            Token::IntLiteral(num_str.parse().unwrap())
+            Token::IntLiteral(s.parse().unwrap_or(0))
         }
     }
 
@@ -383,8 +460,17 @@ impl Lexer {
                             Token::Comma
                         }
                         '.' => {
-                            self.advance();
-                            Token::Dot
+                            // 处理省略号 ...
+                            if self.peek_char(1) == Some('.') && self.peek_char(2) == Some('.') {
+                                // 消费三个点
+                                self.advance();
+                                self.advance();
+                                self.advance();
+                                Token::Ellipsis
+                            } else {
+                                self.advance();
+                                Token::Dot
+                            }
                         }
                         '?' => {
                             self.advance();
